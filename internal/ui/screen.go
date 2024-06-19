@@ -1,8 +1,12 @@
 package ui
 
 import (
+	"fmt"
+	"os"
 	"os/user"
+	"path/filepath"
 
+	"fyne.io/fyne/theme"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -27,9 +31,9 @@ func InitScreenData(cwd binding.ExternalString) *ScreenData {
 	}
 }
 
-func InitScreen(a fyne.App) (fyne.Window, error) {
+func InitScreen(w fyne.Window) (fyne.Window, error) {
 	// a := app.New()
-	w := a.NewWindow("File Explorer")
+	// w := a.NewWindow("File Explorer")
 	usr, err := user.Current()
 	cwd := binding.BindString(&usr.HomeDir)
 	sd := InitScreenData(cwd)
@@ -88,4 +92,54 @@ func updateScreenData(fpath string, sd *ScreenData) {
 	scrollContainer := container.NewScroll(sd.fContainer)
 	scrollContainer.Refresh()
 	// scrollContainer.ScrollToTop()
+}
+
+func FileItem(file os.DirEntry, cwd binding.ExternalString, sd *ScreenData) *fyne.Container {
+	var icon fyne.Resource
+
+	if file.IsDir() {
+		icon = theme.FolderIcon()
+	} else {
+		switch filepath.Ext(file.Name()) {
+		case ".txt":
+			icon = theme.FileTextIcon()
+		case ".png", ".jpg", ".jpeg", ".gif":
+			icon = theme.FileImageIcon()
+		case ".mp4", ".mkv", ".avi":
+			icon = theme.FileVideoIcon()
+		case ".mp3", ".wav", ".flac":
+			icon = theme.FileAudioIcon()
+		case ".pdf":
+			icon = theme.FileTextIcon()
+		default:
+			icon = theme.FileIcon()
+		}
+	}
+
+	// label := widget.NewLabel(file.Name())
+
+	clickable := widget.NewButtonWithIcon(file.Name(), icon, func() {
+		dir, err := cwd.Get()
+		if err != nil {
+			fyne.LogError("Error getting cwd", err)
+		}
+
+		fpath := filepath.Join(dir, file.Name())
+		if file.IsDir() {
+			// Change directory path
+			cwd.Set(fpath)
+			updateScreenData(fpath, sd)
+			sd.fContainer.Refresh()
+		} else {
+			pkg.OpenFile(fpath)
+		}
+	})
+	clickable.Alignment = widget.ButtonAlignLeading // Align text to the left
+
+	fileItem := container.NewHBox(
+		clickable,
+	)
+	fmt.Println(sd.files.Length())
+
+	return fileItem
 }

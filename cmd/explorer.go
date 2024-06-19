@@ -8,14 +8,15 @@ import (
 
 func main() {
 	a := app.New()
-	w, err := ui.InitScreen(a)
+	w := a.NewWindow("File Explorer")
+	w_new, err := ui.InitScreen(w)
 
 	if err != nil {
 		fyne.LogError("Can't load window", err)
 		return
 	}
 
-	w.Resize(fyne.NewSize(800, 600))
-	w.ShowAndRun()
+	w_new.Resize(fyne.NewSize(800, 600))
+	w_new.ShowAndRun()
 
 }
