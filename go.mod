@@ -4,8 +4,6 @@ go 1.22.1
 
 require fyne.io/fyne/v2 v2.4.5
 
-require github.com/AllenDang/w32 v0.0.0-20180428130237-ad0a36d80adc
-
 require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
