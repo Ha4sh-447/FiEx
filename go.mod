@@ -1,16 +1,22 @@
-module github.com/Ha4sh-447/fileExp
+module github.com/Ha4sh-447/FiEx
 
 go 1.22.1
 
-require fyne.io/fyne/v2 v2.4.5
-
 require (
-	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	fyne.io/fyne/v2 v2.4.5
+	github.com/charlievieth/fastwalk v1.0.6
+	github.com/saracen/walker v0.1.4
 )
 
 require (
-	fyne.io/fyne v1.4.3
+	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	golang.org/x/sync v0.6.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
+)
+
+require (
 	fyne.io/systray v1.10.1-0.20231115130155-104f5ef7839e // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fredbi/uri v1.0.0 // indirect

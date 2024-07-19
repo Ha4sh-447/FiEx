@@ -1,4 +1,4 @@
-package files
+package pkg
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -17,28 +18,40 @@ import (
 
 func walkerReadFiles(path string) ([]string, error) {
 	fmt.Println("Starting file search")
+	localCache, err := os.UserCacheDir()
+	cleanCachePath := filepath.Clean(localCache)
+	if err != nil {
+		slog.Warn("Can't get cache path", "Warn", err)
+	}
+
 	start := time.Now()
 	var fileBuff []string
 
+	// Do not include files from cache as
+	// clearing system cache files will result in search cache errors
 	walkFun := func(pathname string, fi os.FileInfo) error {
-		fileBuff = append(fileBuff, pathname)
+		cleanPathName := filepath.Clean(pathname)
+
+		if !strings.HasPrefix(cleanPathName, cleanCachePath) {
+			fileBuff = append(fileBuff, pathname)
+		}
+
 		return nil
 	}
 
 	// cpuLimit := walker.WithLimit(25)
 
-	// error callback option
 	errorCallbackOption := walker.WithErrorCallback(func(pathname string, err error) error {
 		// ignore permissione errors
 		if os.IsPermission(err) {
 			return nil
 		}
-		// halt traversal on any other error
+
 		return err
 	})
 
 	walker.Walk(path, walkFun, errorCallbackOption)
-	slog.Info("Time Taken by Walker function: ", time.Since(start))
+	slog.Info("Time Taken by Walker function: ", "Info", time.Since(start))
 	return fileBuff, nil
 }
 
@@ -75,7 +88,6 @@ func Search(dir, query string) []string {
 		}(data)
 		end += dataPerSet
 		in += dataPerSet
-		// fmt.Println("Iterations res data len: ", len(data))
 	}
 
 	wg.Wait()
@@ -93,20 +105,15 @@ func Search(dir, query string) []string {
 	sort.Slice(topResult, func(i, j int) bool {
 		return topResult[i].Score > topResult[j].Score
 	})
-	fmt.Println(topResult)
 
 	// topResults := make([]string, 50)
 	var topResults []string
 
 	for _, i := range topResult {
-		// if i.Path != "" {
 		topResults = append(topResults, i.Path)
-		// }
 	}
 
-	slog.Info("Time taken to complete search: ", time.Since(start))
-	// fmt.Println(topResult)
-	fmt.Println(len(topResults))
+	slog.Info("Time taken to complete search: ", "Info", time.Since(start))
 	return topResults
 }
 
@@ -122,19 +129,19 @@ func maxScore(fileBuff []string, query string) topRes {
 			str = l
 		}
 	}
-	fmt.Println("High score string: ", str)
 	str = strings.ReplaceAll(str, "\\\\", "\\")
-	// slog.Info("High score string: ", str)
+
 	return topRes{Path: str, Score: m}
 }
 
-// Better scoring system required
+// TODO: Better scoring system required
+
 func Score(path, query string) int {
 	var score int = 0
 	path_l := strings.ToLower(path)
 	query_l := strings.ToLower(query)
 
-	pL := len(path_l)
+	// pL := len(path_l)
 
 	// Match at the end
 	if strings.HasSuffix(path_l, query_l) {
@@ -148,9 +155,9 @@ func Score(path, query string) int {
 	// Match at the beginning
 	if strings.HasPrefix(path, query) {
 		if strings.HasSuffix(path_l, query_l) {
-			score += 32
+			score += 22
 		} else {
-			score += 30
+			score += 20
 		}
 	}
 
@@ -185,22 +192,21 @@ func Score(path, query string) int {
 	}
 	score += (5 * maxCount)
 
-	return score - pL
+	return score
 }
 
-func SearchRecentcache(query, path string) []string {
-	res, err := internal.GetCache(path)
-	if err != nil {
-		slog.Error("Cache error: ", err)
+func SearchInCache(query string, res *internal.SearchCache) []string {
+
+	if res.Store == nil {
 		return nil
 	}
 
-	for _, r := range res {
-		if p := r[query]; p != nil {
-			return p
+	for q, r := range res.Store {
+		if q == query {
+			return r
 		}
 	}
 
-	slog.Info(query, " not in cache")
+	slog.Info("Not in cache", "Query", query)
 	return nil
 }
