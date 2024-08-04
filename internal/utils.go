@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-const fName string = "\\__recent_cache__.json"
+const fName string = "\\__recent_cache__.msgpack"
 
 func GetCachePath() string {
 	path, err := os.UserCacheDir()
@@ -14,4 +14,8 @@ func GetCachePath() string {
 		return ""
 	}
 	return path + fName
+}
+
+func MatchString(s, m string) int {
+	return -1
 }

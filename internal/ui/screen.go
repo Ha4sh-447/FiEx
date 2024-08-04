@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"io/fs"
 	"log"
 	"log/slog"
@@ -10,11 +11,11 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/Ha4sh-447/FiEx/internal"
 	"github.com/Ha4sh-447/FiEx/internal/cache"
 	"github.com/Ha4sh-447/FiEx/internal/ui/custom"
 	pkg "github.com/Ha4sh-447/FiEx/pkg"
@@ -69,46 +70,57 @@ func InitScreen(w fyne.Window) (fyne.Window, error) {
 	fpath := ""
 	cwd := binding.BindString(&fpath)
 	sd := InitScreenData(cwd)
-	cachePath := internal.GetCachePath()
-	cache, err := cache.GetCache(cachePath)
 
-	if err != nil {
-		slog.Error("Can't find local cache: ", "error", err)
-	}
+	loadingLabel := widget.NewLabel("Loading cache, please wait...")
+	bg := canvas.NewRectangle(&color.RGBA{R: 0, G: 0, B: 0, A: 255})
+	bg.FillColor = color.Black
+	bg.Resize(fyne.NewSize(1200, 600))
+	loadingContent := container.NewStack(bg, container.NewCenter(loadingLabel))
 
-	cwd.AddListener(binding.NewDataListener(func() {
-		ScreenUpdate(w, sd, false)
-	}))
+	// Set the initial content to the loading screen
+	w.SetContent(loadingContent)
 
-	wd_widget := widget.NewLabel("Current Directory:")
-	wd_widget_data := sd.widget_Data
-
-	back_button := backButton(sd)
-
-	sd.topbar.Add(back_button)
-	sd.topbar.Add(wd_widget)
-	sd.topbar.Add(wd_widget_data)
-
-	search := widget.NewEntryWithData(sd.searchQuery)
-	search.SetPlaceHolder("Search files...")
-
-	// searchSync, _ := debounce.Debounce(func() {
-	searchSync := func() {
-		query, _ := sd.searchQuery.Get()
-		dir := sd.widget_Data.Text
-
-		if query == "" {
-			ScreenUpdate(w, sd, false)
-			return
+	// Start a goroutine to load the cache
+	go func() {
+		sysCache, err := cache.GetCache_msg("output.msgpack")
+		if err != nil {
+			slog.Error("Can't find local cache: ", "error", err)
+			// Create cache file
+			slog.Info("Creating local cache", "CACHE", "")
+			sysCache = cache.CreateSysCache()
+			slog.Info("Created local cache", "CACHE", "COMPLETED")
 		}
 
-		cacheRes := pkg.SearchInCache(query, cache)
+		slog.Info("INFO", "Loaded cache", len(sysCache.Store))
 
-		// fmt.Println(cacheRes)
+		cwd.AddListener(binding.NewDataListener(func() {
+			ScreenUpdate(w, sd, false)
+		}))
 
-		if cacheRes == nil {
+		wd_widget := widget.NewLabel("Current Directory:")
+		wd_widget_data := sd.widget_Data
 
-			res := pkg.Search(dir, query)
+		back_button := backButton(sd)
+
+		sd.topbar.Add(back_button)
+		sd.topbar.Add(wd_widget)
+		sd.topbar.Add(wd_widget_data)
+
+		search := widget.NewEntryWithData(sd.searchQuery)
+		search.SetPlaceHolder("Search files...")
+
+		searchSync := func() {
+			query, _ := sd.searchQuery.Get()
+			dir := filepath.Clean(sd.widget_Data.Text)
+
+			if query == "" {
+				ScreenUpdate(w, sd, false)
+				return
+			}
+
+			cacheRes := pkg.SearchInCache(dir, sysCache)
+
+			res := pkg.Search(dir, query, cacheRes)
 
 			if len(res) == 0 {
 				sd.fContainer.RemoveAll()
@@ -117,38 +129,35 @@ func InitScreen(w fyne.Window) (fyne.Window, error) {
 			}
 
 			sd.searchRes = append(sd.searchRes, res...)
-			cache.Store[query] = sd.searchRes
-			cache.WriteToFile(cachePath)
-		} else {
-			slog.Info("found in cache")
-			sd.searchRes = append(sd.searchRes, cacheRes...)
+			ScreenUpdate(w, sd, true)
+			sd.searchRes = nil
 		}
-		ScreenUpdate(w, sd, true)
-		sd.searchRes = nil
-		// }, 200*time.Millisecond)
-	}
 
-	search.OnSubmitted = func(_ string) {
-		sd.fContainer.RemoveAll()
-		w := widget.NewLabel("Searching...")
-		w.Move(fyne.NewPos(400, 300))
-		sd.fContainer.Add(w)
-		searchSync()
-	}
-	search.FocusLost()
+		search.OnSubmitted = func(_ string) {
+			sd.fContainer.RemoveAll()
+			w := widget.NewLabel("Searching...")
+			w.Move(fyne.NewPos(400, 300))
+			sd.fContainer.Add(w)
+			searchSync()
+		}
+		search.FocusLost()
 
-	sd.screen.Add(sd.topbar)
-	sd.screen.Add(search)
-	sd.screen.Add(widget.NewSeparator())
-	sd.screen.Add(sd.fContainer)
+		sd.screen.Add(sd.topbar)
+		sd.screen.Add(search)
+		sd.screen.Add(widget.NewSeparator())
+		sd.screen.Add(sd.fContainer)
 
-	scrollContainer := container.NewScroll(sd.fContainer)
-	scrollContainer.SetMinSize(fyne.NewSize(500, 600))
-	scrollContainer.ScrollToTop()
+		scrollContainer := container.NewScroll(sd.fContainer)
+		scrollContainer.SetMinSize(fyne.NewSize(500, 600))
+		scrollContainer.ScrollToTop()
 
-	screen := container.NewBorder(sd.topbar, nil, nil, nil, container.NewVBox(search, scrollContainer))
+		screen := container.NewBorder(sd.topbar, nil, nil, nil, container.NewVBox(search, scrollContainer))
+		content := container.NewMax(bg, screen)
 
-	w.SetContent(screen)
+		// Update the window content to the actual application
+		w.SetContent(content)
+	}()
+
 	return w, nil
 }
 
@@ -207,7 +216,7 @@ func ScreenUpdate(w fyne.Window, sd *ScreenData, isSearchRes bool) {
 		}
 
 		if fpath == "" {
-			Volume(w, sd)
+			ShowVolumes(w, sd)
 			return
 		}
 
@@ -229,25 +238,24 @@ func ScreenUpdate(w fyne.Window, sd *ScreenData, isSearchRes bool) {
 
 	w.Content().Refresh()
 }
-func Volume(w fyne.Window, sd *ScreenData) {
-	partitions, err := disk.Partitions(false)
+
+func ShowVolumes(w fyne.Window, sd *ScreenData) {
+	diskInfoList, err := files.GetDiskUsage()
 	if err != nil {
 		slog.Error("Failed to get disk partitions: ", "error", err)
+		return
 	}
 
+	Volume(w, sd, diskInfoList)
+}
+
+func Volume(w fyne.Window, sd *ScreenData, diskInfoList []files.DiskInfo) {
 	sd.files.Set(nil)
 	sd.fContainer.RemoveAll()
 
-	for _, partition := range partitions {
-		mountpoint := partition.Mountpoint
-		usage, err := disk.Usage(mountpoint)
-		if err != nil {
-			slog.Error("Failed to get disk usage", "error", err)
-			continue
-		}
-		// Round of usage and other numbers to 100's
+	for _, diskInfo := range diskInfoList {
 		sd.fContainer.Add(widget.NewSeparator())
-		sd.fContainer.Add(DriveItem(mountpoint, usage, w, sd))
+		sd.fContainer.Add(DriveItem(diskInfo.Mountpoint, diskInfo.Usage, w, sd))
 	}
 
 	w.Content().Refresh()
@@ -288,14 +296,12 @@ func FileItem(file string, w fyne.Window, sd *ScreenData, isSearchRes bool) *fyn
 
 	var f fs.FileInfo
 	if !isSearchRes {
-
 		var fullPath string
 		if strings.HasPrefix(file, dir) {
 			fullPath = file
 		} else {
 			fullPath = filepath.Join(dir, file)
 		}
-		// fmt.Println("Converted path: ", fullPath)
 		f, err = os.Lstat(fullPath)
 		if err != nil {
 			slog.Warn("Lstat error: ", "error", err)
@@ -308,36 +314,34 @@ func FileItem(file string, w fyne.Window, sd *ScreenData, isSearchRes bool) *fyn
 	}
 	icon := fileExtType(file, f.IsDir())
 
+	var content fyne.CanvasObject
 	if isSearchRes {
-
 		c := custom.NewCustomButton(icon, f.Name(), file, func() {
-			// fpath := filepath.Join(dir, file)
 			if f.IsDir() {
 				sd.working_dir.Set(file)
 			} else {
 				files.OpenFile(file)
 			}
 		})
+		content = c
+	} else {
+		clickable := widget.NewButtonWithIcon(file, icon, func() {
+			fpath := filepath.Join(dir, file)
+			if f.IsDir() {
+				sd.working_dir.Set(fpath)
+			} else {
+				files.OpenFile(fpath)
+			}
+		})
+		clickable.Alignment = widget.ButtonAlignLeading
 
-		fileItem := container.NewHBox(
-			c,
-		)
-		return fileItem
+		content = clickable
 	}
-	clickable := widget.NewButtonWithIcon(file, icon, func() {
 
-		fpath := filepath.Join(dir, file)
-		if f.IsDir() {
-			sd.working_dir.Set(fpath)
-		} else {
-			files.OpenFile(fpath)
-		}
-	})
-	clickable.Alignment = widget.ButtonAlignLeading
+	bg := canvas.NewRectangle(&color.RGBA{R: 0, G: 0, B: 0, A: 255})
 
-	fileItem := container.NewHBox(
-		clickable,
-	)
+	fileItem := container.NewStack(bg, content)
+
 	return fileItem
 }
 

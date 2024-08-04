@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"fmt"
-	"log"
 	"log/slog"
 	"math"
 	"os"
@@ -16,7 +15,7 @@ import (
 	"github.com/saracen/walker"
 )
 
-func walkerReadFiles(path string) ([]string, error) {
+func TraverseDir(path string) ([]string, error) {
 	fmt.Println("Starting file search")
 	localCache, err := os.UserCacheDir()
 	cleanCachePath := filepath.Clean(localCache)
@@ -60,26 +59,26 @@ type topRes struct {
 	Score int
 }
 
-func Search(dir, query string) []string {
+func Search(dir, query string, res []string) []string {
 	start := time.Now()
 
-	fileBuff, err := walkerReadFiles(dir)
-	if err != nil {
-		log.Fatal("Can't read file", err)
-	}
+	// fileBuff, err := TraverseDir(dir)
+	// if err != nil {
+	// 	log.Fatal("Can't read file", err)
+	// }
 
 	var topResult []topRes
 	var wg sync.WaitGroup
 	results := make(chan topRes, 50)
 
 	maxSets := 50
-	dataPerSet := len(fileBuff) / maxSets
-	fmt.Println("Len and dps: ", len(fileBuff), dataPerSet)
+	dataPerSet := len(res) / maxSets
+	fmt.Println("Len and dps: ", len(res), dataPerSet)
 	in := 0
 	end := dataPerSet
 	// slog.Info("CurrRead: ", currRead)
 	for i := 0; i < maxSets; i++ {
-		data := fileBuff[in:end]
+		data := res[in:end]
 		wg.Add(1)
 		go func(data []string) {
 			defer wg.Done()
@@ -135,6 +134,17 @@ func maxScore(fileBuff []string, query string) topRes {
 }
 
 // TODO: Better scoring system required
+/*
+	* Exact match => 45
+	* Match at end and start - exact matches, word to word => 30
+	* At the end, if the end part of the string if there is not an exact match but still a match => 25
+	* For searching as prefix =>
+			* Start string checking relative to current directory path
+			* scoring system = (20, 15)
+	* For matching within string =>
+			* get the maximum subsequence that matches the query
+			* score -> length * 2
+*/
 
 func Score(path, query string) int {
 	var score int = 0
@@ -143,22 +153,30 @@ func Score(path, query string) int {
 
 	// pL := len(path_l)
 
+	store := strings.Split(path_l, "\\")
+	// a way to calculate difference in string paths
+	// get that part of the query which is after the path string
+
+	// relPath := strings.Split(path_l, query_l)
+
+	// fmt.Println("Path: ", path_l)
+	// fmt.Println("Query: ", query_l)
+	// fmt.Println("Path ending: ", store[len(store)-1])
+	end := store[len(store)-1]
+	// fmt.Println("Split the path after the query: ", relPath)
+
 	// Match at the end
-	if strings.HasSuffix(path_l, query_l) {
-		if strings.HasSuffix(path_l, query_l) {
-			score += 52
-		} else {
-			score += 50
-		}
+	if strings.HasSuffix(end, query_l) {
+		score += 52
+	} else {
+		score += 50
 	}
 
 	// Match at the beginning
 	if strings.HasPrefix(path, query) {
-		if strings.HasSuffix(path_l, query_l) {
-			score += 22
-		} else {
-			score += 20
-		}
+		score += 22
+	} else {
+		score += 20
 	}
 
 	// Match in the middle
@@ -195,18 +213,30 @@ func Score(path, query string) int {
 	return score
 }
 
-func SearchInCache(query string, res *internal.SearchCache) []string {
+func SearchInCache(currDir string, res *internal.SearchCache) []string {
 
-	if res.Store == nil {
+	if res.SyncStore == nil {
 		return nil
 	}
+	var result []string
 
-	for q, r := range res.Store {
-		if q == query {
-			return r
+	res.SyncStore.Range(func(key, value any) bool {
+		if key == currDir {
+			result = value.([]string)
+			slog.Info("Found in Cache", "dir", key)
+			return false
 		}
-	}
+		return true
+	})
 
-	slog.Info("Not in cache", "Query", query)
-	return nil
+	// for q, r := range res.Store {
+	// 	if q == filepath.Clean(currDir) {
+	// 		slog.Info("Found in Cache", "dir", q)
+	// 		fmt.Println(r)
+	// 		return r
+	// 	}
+	// }
+
+	slog.Info("Not in cache", "dir", currDir)
+	return result
 }
