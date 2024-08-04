@@ -4,55 +4,13 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	internal "github.com/Ha4sh-447/FiEx/internal/cache"
-	"github.com/saracen/walker"
 )
-
-func TraverseDir(path string) ([]string, error) {
-	fmt.Println("Starting file search")
-	localCache, err := os.UserCacheDir()
-	cleanCachePath := filepath.Clean(localCache)
-	if err != nil {
-		slog.Warn("Can't get cache path", "Warn", err)
-	}
-
-	start := time.Now()
-	var fileBuff []string
-
-	// Do not include files from cache as
-	// clearing system cache files will result in search cache errors
-	walkFun := func(pathname string, fi os.FileInfo) error {
-		cleanPathName := filepath.Clean(pathname)
-
-		if !strings.HasPrefix(cleanPathName, cleanCachePath) {
-			fileBuff = append(fileBuff, pathname)
-		}
-
-		return nil
-	}
-
-	// cpuLimit := walker.WithLimit(25)
-
-	errorCallbackOption := walker.WithErrorCallback(func(pathname string, err error) error {
-		// ignore permissione errors
-		if os.IsPermission(err) {
-			return nil
-		}
-
-		return err
-	})
-
-	walker.Walk(path, walkFun, errorCallbackOption)
-	slog.Info("Time Taken by Walker function: ", "Info", time.Since(start))
-	return fileBuff, nil
-}
 
 type topRes struct {
 	Path  string
