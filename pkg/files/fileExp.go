@@ -2,7 +2,6 @@ package files
 
 import (
 	"io/fs"
-	"log"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -20,13 +19,13 @@ import (
 func Files(cwd string) (*user.User, []fs.DirEntry, error) {
 	user, err := user.Current()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Can't get user", "user", err)
 		return nil, nil, err
 	}
 
 	files, err := os.ReadDir(cwd)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Can't load file", "Error message", err)
 		return nil, nil, err
 	}
 
@@ -70,9 +69,6 @@ func GetDiskUsage() ([]DiskInfo, error) {
 }
 
 func TraverseDir(dir string) *sync.Map {
-	// var fileBuff []string
-	// var m map[string][]string
-	// m := make(map[string][]string)
 	m := &sync.Map{}
 
 	dir, err := filepath.Abs(filepath.Clean(dir))

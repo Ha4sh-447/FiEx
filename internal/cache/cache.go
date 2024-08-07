@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bufio"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -13,11 +14,8 @@ import (
 
 // TODO: Need to change the cache system
 /*
- * Instead of storing search results in cache, cache the whole file system
- * as the application will search for files in the current dir
- * if the query is already present in cache it will show that result instead of the one found in current dir
- * hence cache the fs and then retrieve the dir from cache
- * and then search from the returned result
+* If any changes occur to the file system,
+* read the changes and update the cache accoding to it
  */
 
 type SearchCache struct {
@@ -42,16 +40,6 @@ func (r *SearchCache) WriteToFile_msgPack(filename string) error {
 	writer := bufio.NewWriter(file)
 	encoder := msgpack.NewEncoder(writer)
 
-	// Write data in chunks
-	// for key, value := range r.Store {
-	// 	if err := encoder.Encode(key); err != nil {
-	// 		return err
-	// 	}
-	// 	if err := encoder.Encode(value); err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	r.SyncStore.Range(func(key, value any) bool {
 		if err := encoder.Encode(key); err != nil {
 			return false
@@ -66,6 +54,10 @@ func (r *SearchCache) WriteToFile_msgPack(filename string) error {
 	return nil
 }
 
+// This caches just the user's home directory,
+// this is because it takes long time to cache it
+// hence, would be faster to just search the ones which aren't
+// present in the cache and later add them
 func CreateSysCache() *SearchCache {
 	sc := NewSearchCache()
 	usr, err := os.UserHomeDir()
@@ -117,4 +109,19 @@ func GetCache_msg(filename string) (*SearchCache, error) {
 	}
 
 	return &cache, nil
+}
+
+func (sc *SearchCache) Add(key string, val []string) {
+	sc.SyncStore.Store(key, val)
+	slog.Info("Added to cache", "Success", fmt.Sprintf("Added: %s", key))
+}
+
+func (sc *SearchCache) Update(key string, val []string) {
+	if res, present := sc.SyncStore.Load(key); present {
+		for _, v := range val {
+			sc.SyncStore.Store(key, append(res.([]string), v))
+		}
+	} else {
+		slog.Error("Key not present", "Add key", key)
+	}
 }
